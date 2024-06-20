@@ -17,9 +17,9 @@ gamertags = api.batchGetGamertags(list(activity.keys()))
 # ])
 
 df = pd.DataFrame([
-	dict(gamertag=gamertags[xuid], start=datetime.utcfromtimestamp(d['s']), end=datetime.utcfromtimestamp(d['e']))
+	dict(gamertag=gamertags[xuid], start=datetime.utcfromtimestamp(d['s']), end=datetime.utcfromtimestamp(d['e']), hours=((d['e'] - d['s']) / 3600))
 	for xuid in activity for d in activity[xuid]
 ])
-fig = px.timeline(df, x_start='start', x_end='end', y='gamertag', template='plotly_dark')
+fig = px.timeline(df, x_start='start', x_end='end', y='gamertag', hover_data="hours", template='plotly_dark')
 fig.update_yaxes(autorange='reversed')
 fig.show()
