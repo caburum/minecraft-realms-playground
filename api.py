@@ -42,6 +42,8 @@ class API():
 		res = requests.get(f'https://x-bot.live/api/postman/auth?relyingParty={relyingParty.value[1]}', headers={
 			'authorization': environ['X_BOT_API_KEY'],
 		}).json()
+		if 'XSTSToken' not in res:
+			raise Exception('invalid tokens', res)
 
 		env_file_path = Path('./.env')
 		env_file_path.touch(mode=0o600, exist_ok=True)
