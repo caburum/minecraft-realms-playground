@@ -43,27 +43,26 @@ data_range = (time_max - time_min) * 1000
 
 def get_ticks(time_min: float, time_max: float):
 	interval = (time_max - time_min) * 1000
-	if interval <= 3 * one_day:
+	if interval <= 1.5 * one_day:
 		dtick = one_hour
-		dtickformat = "%H:%M"
-		tick0 = datetime.fromtimestamp(time_min).replace(hour=0, minute=0)
+		dtickformat = "%b %e %H:%M" # todo: use 2 x axis, one for day, one for hour
+		tick0 = datetime.fromtimestamp(time_min).replace(hour=0, minute=0, second=0, microsecond=0)
 	elif one_day < interval:
 		dtick = one_day
 		dtickformat = "%b %e"
-		tick0 = datetime.fromtimestamp(time_min).replace(day=1, hour=0, minute=0)
+		tick0 = datetime.fromtimestamp(time_min).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 	print('dtick=', dtick, 'dtickformat=', dtickformat)
 	return {'dtick': dtick, 'tickformat': dtickformat, 'tick0': tick0.isoformat()}
 
-
-fig = px.timeline(df, template='plotly_dark', x_start='start', x_end='end', y='gamertag', hover_name='gamertag', hover_data={
+timeline = px.timeline(df, template='plotly_dark', x_start='start', x_end='end', y='gamertag', hover_name='gamertag', hover_data={
 	'gamertag': False,
 	'start': '|%Y-%m-%d %H:%M',
 	'end': '|%Y-%m-%d %H:%M',
 	'hours': ':.1f'
 })
-fig.update_yaxes(autorange='reversed')
+timeline.update_yaxes(autorange='reversed')
 # minor=dict(ticklen=4, gridcolor='#333333', tick0='2024-01-01', dtick=60*60*1000)
-fig.update_xaxes(type='date', dtick='D1', ticklabelmode='period', rangeslider_visible=True,
+timeline.update_xaxes(type='date', dtick='D1', ticklabelmode='period', rangeslider_visible=True,
 	rangeselector=dict(buttons=list([
 		dict(count=1, label='1d', step='day', stepmode='backward'),
 		dict(count=7, label='1w', step='day', stepmode='backward'),
@@ -75,33 +74,47 @@ fig.update_xaxes(type='date', dtick='D1', ticklabelmode='period', rangeslider_vi
 	# 	dict(dtickrange=[3600000, None], value='%b %e')
 	# ]
 )
-fig.update_xaxes(get_ticks(time_min, time_max))
-fig.update_layout(xaxis_rangeselector_font_color='white', xaxis_rangeselector_activecolor='#333333', xaxis_rangeselector_bgcolor='#222222')
+timeline.update_xaxes(get_ticks(time_min, time_max))
+timeline.update_layout(xaxis_rangeselector_font_color='white', xaxis_rangeselector_activecolor='#333333', xaxis_rangeselector_bgcolor='#222222')
 
-app = dash.Dash(__name__)
+bar = px.bar(userTotalHours, x='gamertag', y='hours', template='plotly_dark')
+
+app = dash.Dash(__name__, external_stylesheets=['https://codepen.io/chriddyp/pen/bWLwgP.css'])
 app.layout = html.Div([
-	dcc.Graph(id='fig', figure=fig)
-])
+	dcc.Tabs([
+		dcc.Tab(label='timeline', children=[
+			dcc.Graph(id='fig', figure=timeline)
+		]),
+		dcc.Tab(label='totals', children=[
+			dcc.Graph(id='total', figure=bar)
+		])
+	])
+], style={'width': '100vw', 'height': '100vh'})
 
 @app.callback(
 	Output('fig', 'figure'),
 	[Input('fig', 'relayoutData'), State('fig', 'figure')]
 )
 def scale_xaxes(relayout_data: Optional[Dict[str, Any]], figure):
+	print(relayout_data)
 	if relayout_data is None: raise PreventUpdate
+
+	if 'xaxis.range' in relayout_data: # normalize rangeslider inputs
+		relayout_data['xaxis.range[0]'] = relayout_data['xaxis.range'][0]
+		relayout_data['xaxis.range[1]'] = relayout_data['xaxis.range'][1]
 
 	if 'xaxis.range[0]' in relayout_data and 'xaxis.range[1]' in relayout_data:
 		print('zooming in: ', datetime.now().isoformat())
 		in_time_min = dateparser.parse(relayout_data['xaxis.range[0]']).timestamp()
 		in_time_max = dateparser.parse(relayout_data['xaxis.range[1]']).timestamp()
 		ticks = get_ticks(in_time_min, in_time_max)
-		fig.update_xaxes(ticks)
-		return fig
+		figure['layout']['xaxis'].update(ticks)
+		return figure
 	elif 'xaxis.autorange' in relayout_data:
 		print('resetting zoom to original: ', datetime.now().isoformat())
 		ticks = get_ticks(time_min, time_max)
-		fig.update_xaxes(ticks)
-		return fig
+		figure['layout']['xaxis'].update(ticks)
+		return figure
 	else:
 		raise dash.exceptions.PreventUpdate
 
