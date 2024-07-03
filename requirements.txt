@@ -3,4 +3,5 @@ requests
 pandas
 plotly
 dash
+dash-mantine-components
 pick

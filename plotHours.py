@@ -1,23 +1,34 @@
+import os
+os.environ['REACT_VERSION'] = '18.2.0' # required for dash_mantine_components
+
 import api
 from pick import pick
 import pandas as pd
 from datetime import datetime, UTC
 import plotly.express as px
 import dash
-from dash import html, dcc, Output, Input, State
+from dash import dcc, Output, Input, State
 from dash.exceptions import PreventUpdate
+import dash_mantine_components as dmc
 import dateutil.parser as dateparser
 from typing import Dict, Any, Optional
 
+debug = False
+
 realms = api.getRealms()
 
-realmId = '20229023'
-if realmId is None:
-	# picker reactivating?
-	picker = pick([(realm['name'], realm['id']) for realm in realms], 'arrows/enter to select realm:', clear_screen=False)
-	realmId = picker[0][1]
+# todo: add picker into dash app
+realm = None
+if debug:
+	realm = (realms[0]['name'], realms[0]['id']) # prevent repeatedly running picker
+else:
+	realm, _ = pick([(realm['name'], realm['id']) for realm in realms], 'arrows/enter to select realm:', clear_screen=False)
 
-activity = api.getActivity(realmId)
+if realm is None:
+	print('no realm selected')
+	exit()
+
+activity = api.getActivity(realm[1])
 print(activity)
 
 gamertags = api.batchGetGamertags(list(activity.keys()))
@@ -79,21 +90,25 @@ timeline.update_layout(xaxis_rangeselector_font_color='white', xaxis_rangeselect
 
 bar = px.bar(userTotalHours, x='gamertag', y='hours', template='plotly_dark')
 
-app = dash.Dash(__name__, external_stylesheets=['https://codepen.io/chriddyp/pen/bWLwgP.css'])
-app.layout = html.Div([
-	dcc.Tabs([
-		dcc.Tab(label='timeline', children=[
-			dcc.Graph(id='fig', figure=timeline)
-		]),
-		dcc.Tab(label='totals', children=[
-			dcc.Graph(id='total', figure=bar)
-		])
-	])
-], style={'width': '100vw', 'height': '100vh'})
+app = dash.Dash(__name__, title=f'{realm[0]} realm hours')
+app.layout = dmc.MantineProvider([
+	dmc.Tabs([
+		dmc.TabsList([
+			dmc.TabsTab('timeline', value='timeline'),
+			dmc.TabsTab('totals', value='totals')
+		], style={'height': '5%'}), # todo: proper way?
+		dmc.TabsPanel(value='timeline', children=[
+			dcc.Graph(id='timeline', figure=timeline, style={'height': '100%'})
+		], style={'height': '95%'}),
+		dmc.TabsPanel(value='totals', children=[
+			dcc.Graph(id='totals', figure=bar, style={'height': '100%'})
+		], style={'height': '95%'})
+	], value="timeline", style={'height': '100vh'})
+], forceColorScheme='dark')
 
 @app.callback(
-	Output('fig', 'figure'),
-	[Input('fig', 'relayoutData'), State('fig', 'figure')]
+	Output('timeline', 'figure'),
+	[Input('timeline', 'relayoutData'), State('timeline', 'figure')]
 )
 def scale_xaxes(relayout_data: Optional[Dict[str, Any]], figure):
 	print(relayout_data)
@@ -103,15 +118,17 @@ def scale_xaxes(relayout_data: Optional[Dict[str, Any]], figure):
 		relayout_data['xaxis.range[0]'] = relayout_data['xaxis.range'][0]
 		relayout_data['xaxis.range[1]'] = relayout_data['xaxis.range'][1]
 
+	# https://community.plotly.com/t/58304/2
+	# https://stackoverflow.com/q/56611105
 	if 'xaxis.range[0]' in relayout_data and 'xaxis.range[1]' in relayout_data:
-		print('zooming in: ', datetime.now().isoformat())
+		print('zooming in')
 		in_time_min = dateparser.parse(relayout_data['xaxis.range[0]']).timestamp()
 		in_time_max = dateparser.parse(relayout_data['xaxis.range[1]']).timestamp()
 		ticks = get_ticks(in_time_min, in_time_max)
 		figure['layout']['xaxis'].update(ticks)
 		return figure
 	elif 'xaxis.autorange' in relayout_data:
-		print('resetting zoom to original: ', datetime.now().isoformat())
+		print('resetting zoom to original')
 		ticks = get_ticks(time_min, time_max)
 		figure['layout']['xaxis'].update(ticks)
 		return figure
@@ -119,4 +136,4 @@ def scale_xaxes(relayout_data: Optional[Dict[str, Any]], figure):
 		raise dash.exceptions.PreventUpdate
 
 if __name__ == '__main__':
-	app.run(debug=True)
+	app.run(debug=debug)
