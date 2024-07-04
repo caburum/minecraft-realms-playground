@@ -2,3 +2,4 @@ __pycache__
 .env
 *strings.txt
 *.har
+data/activity*.json
